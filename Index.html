@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title> European Weather AL </title>
+<style>
+  :root{
+    --pastel-blue:#a7c7e7;
+    --pastel-yellow:#fff4b3;
+    --pastel-dark1:#1b2735;
+    --pastel-dark2:#3a506b;
+    --card-bg: rgba(255,255,255,0.85);
+    --text:#223;
+  }
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(to bottom, var(--pastel-blue), var(--pastel-yellow));
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    gap:12px;
+    padding:24px;
+    transition:background 800ms ease;
+  }
+  header{max-width:900px;width:100%;text-align:center}
+  h1{margin:0;font-size:1.6rem}
+  .controls{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    align-items:center;
+    justify-content:center;
+    margin-top:12px;
+  }
+  select, button{
+    padding:8px 12px;
+    border-radius:8px;
+    border:1px solid rgba(0,0,0,0.08);
+    font-size:1rem;
+    background:white;
+    cursor:pointer;
+  }
+  .weather{
+    margin-top:16px;
+    font-size:1rem;
+    background:var(--card-bg);
+    padding:18px;
+    border-radius:12px;
+    min-width:300px;
+    max-width:720px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.08);
+    text-align:left;
+  }
+  .weather h2{margin:0 0 8px 0}
+  .weather p{margin:6px 0}
+  #mapButton{background:#ffd366;border:none}
+  .small {font-size:0.9rem;color:#555}
+  footer {margin-top:8px;font-size:0.8rem;color:#444}
+  @media (max-width:480px){
+    .controls{flex-direction:column}
+    select,button{width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>European Weather AL</h1>
+  <div class="small">Select a country & city, or use your location. Day/night background, sounds, and map included.</div>
+</header>
+
+<div class="controls">
+  <label for="countrySelect" class="small">Country</label>
+  <select id="countrySelect" aria-label="Select country"></select>
+
+  <label for="citySelect" class="small">City</label>
+  <select id="citySelect" aria-label="Select city"></select>
+
+  <button id="getBtn">Get Weather</button>
+  <button id="locBtn">Use My Location</button>
+</div>
+
+<div id="info" class="weather" aria-live="polite">
+  <div class="small">No data yet — choose a city or use your location.</div>
+</div>
+
+<button id="mapButton" style="display:none;">Show on Map</button>
+
+<footer>Kiriakh andreou is a bitch</footer>
+
+<!-- Sounds -->
+<audio id="sndSunny" src="https://www.soundjay.com/nature/sounds/birds-1.mp3" preload="auto"></audio>
+<audio id="sndRain" src="https://www.soundjay.com/nature/sounds/rain-1.mp3" preload="auto" loop></audio>
+<audio id="sndWind" src="https://www.soundjay.com/nature/sounds/wind-1.mp3" preload="auto" loop></audio>
+<audio id="sndSnow" src="https://www.soundjay.com/nature/sounds/wind-chimes-1.mp3" preload="auto" loop></audio>
+<audio id="sndThunder" src="https://www.soundjay.com/nature/sounds/thunder-1.mp3" preload="auto" loop></audio>
+
+<script>
+/*
+  FINAL APP
+  - Replace apiKey with your WeatherAPI.com key
+  - All EU countries with 7 cities each are below
+  - Uses weatherapi v1/current.json (location.lat & .lon used for map)
+*/
+
+const apiKey = "34c17ab3b3e14afe9fe171513251008"; // <<< REPLACE THIS
+
+// country code => country full name (for clearer API queries)
+const countryNames = {
+  "AL":"Albania","AT":"Austria","BE":"Belgium","BG":"Bulgaria","BY":"Belarus","CH":"Switzerland",
+  "CY":"Cyprus","CZ":"Czech Republic","DE":"Germany","DK":"Denmark","EE":"Estonia","ES":"Spain",
+  "FI":"Finland","FR":"France","GB":"United Kingdom","GR":"Greece","HR":"Croatia","HU":"Hungary",
+  "IE":"Ireland","IS":"Iceland","IT":"Italy","LI":"Liechtenstein","LT":"Lithuania","LU":"Luxembourg",
+  "LV":"Latvia","MT":"Malta","MD":"Moldova","MC":"Monaco","ME":"Montenegro","NL":"Netherlands",
+  "NO":"Norway","PL":"Poland","PT":"Portugal","RO":"Romania","RS":"Serbia","RU":"Russia",
+  "SE":"Sweden","SI":"Slovenia","SK":"Slovakia","SM":"San Marino","UA":"Ukraine","VA":"Vatican City",
+  "MK":"North Macedonia","AL":"Albania","BA":"Bosnia and Herzegovina"
+};
+
+// All european countries with 7 cities each (common/popular picks)
+const countries = {
+  "AL":["Tirana","Durrës","Vlorë","Shkodër","Fier","Korçë","Berat"],
+  "AD":["Andorra la Vella","Encamp","Sant Julià de Lòria","Escaldes-Engordany","La Massana","Ordino","Canillo"],
+  "AT":["Vienna","Graz","Linz","Salzburg","Innsbruck","Klagenfurt","Villach"],
+  "BA":["Sarajevo","Banja Luka","Tuzla","Zenica","Mostar","Bihać","Prijedor"],
+  "BE":["Brussels","Antwerp","Ghent","Charleroi","Liège","Bruges","Namur"],
+  "BG":["Sofia","Plovdiv","Varna","Burgas","Ruse","Stara Zagora","Pleven"],
+  "BY":["Minsk","Gomel","Mogilev","Vitebsk","Hrodna","Brest","Babruysk"],
+  "CH":["Zurich","Geneva","Basel","Bern","Lausanne","Lucerne","St. Gallen"],
+  "CY":["Nicosia","Limassol","Larnaca","Famagusta","Paphos","Kyrenia","Morfou"],
+  "CZ":["Prague","Brno","Ostrava","Plzeň","Liberec","Olomouc","České Budějovice"],
+  "DE":["Berlin","Hamburg","Munich","Cologne","Frankfurt","Stuttgart","Düsseldorf"],
+  "DK":["Copenhagen","Aarhus","Odense","Aalborg","Esbjerg","Randers","Kolding"],
+  "EE":["Tallinn","Tartu","Narva","Pärnu","Kohtla-Järve","Viljandi","Rakvere"],
+  "ES":["Madrid","Barcelona","Valencia","Seville","Zaragoza","Málaga","Murcia"],
+  "FI":["Helsinki","Espoo","Tampere","Vantaa","Oulu","Turku","Jyväskylä"],
+  "FR":["Paris","Marseille","Lyon","Toulouse","Nice","Nantes","Strasbourg"],
+  "GB":["London","Manchester","Birmingham","Glasgow","Liverpool","Leeds","Edinburgh"],
+  "GR":["Athens","Thessaloniki","Patras","Heraklion","Larissa","Volos","Ioannina"],
+  "HR":["Zagreb","Split","Rijeka","Osijek","Zadar","Pula","Slavonski Brod"],
+  "HU":["Budapest","Debrecen","Szeged","Miskolc","Pécs","Győr","Nyíregyháza"],
+  "IE":["Dublin","Cork","Limerick","Galway","Waterford","Drogheda","Dundalk"],
+  "IS":["Reykjavik","Kópavogur","Hafnarfjörður","Akureyri","Reykjanesbær","Garðabær","Mosfellsbær"],
+  "IT":["Rome","Milan","Naples","Turin","Palermo","Genoa","Bologna"],
+  "LI":["Vaduz","Schaan","Balzers","Triesen","Eschen","Mauren","Ruggell"],
+  "LT":["Vilnius","Kaunas","Klaipėda","Šiauliai","Panevėžys","Alytus","Marijampolė"],
+  "LU":["Luxembourg","Esch-sur-Alzette","Differdange","Dudelange","Ettelbruck","Diekirch","Wiltz"],
+  "LV":["Riga","Daugavpils","Liepāja","Jelgava","Jūrmala","Ventspils","Rēzekne"],
+  "MT":["Valletta","Birkirkara","Mosta","Qormi","Sliema","Zabbar","San Ġwann"],
+  "MD":["Chișinău","Tiraspol","Bălți","Bender","Rîbnița","Cahul","Ungheni"],
+  "MC":["Monaco","Monte Carlo","La Condamine","Fontvieille","Moneghetti","Larvotto","Saint Michel"],
+  "ME":["Podgorica","Nikšić","Herceg Novi","Pljevlja","Bijelo Polje","Bar","Cetinje"],
+  "MK":["Skopje","Bitola","Kumanovo","Prilep","Tetovo","Veles","Ohrid"],
+  "NL":["Amsterdam","Rotterdam","The Hague","Utrecht","Eindhoven","Tilburg","Groningen"],
+  "NO":["Oslo","Bergen","Trondheim","Stavanger","Drammen","Fredrikstad","Kristiansand"],
+  "PL":["Warsaw","Kraków","Łódź","Wrocław","Poznań","Gdańsk","Szczecin"],
+  "PT":["Lisbon","Porto","Braga","Coimbra","Aveiro","Faro","Funchal"],
+  "RO":["Bucharest","Cluj-Napoca","Timișoara","Iași","Constanța","Craiova","Brașov"],
+  "RS":["Belgrade","Novi Sad","Niš","Kragujevac","Subotica","Zrenjanin","Pančevo"],
+  "RU":["Moscow","Saint Petersburg","Novosibirsk","Yekaterinburg","Nizhny Novgorod","Kazan","Samara"],
+  "SE":["Stockholm","Gothenburg","Malmö","Uppsala","Västerås","Örebro","Linköping"],
+  "SI":["Ljubljana","Maribor","Celje","Kranj","Velenje","Novo Mesto","Ptuj"],
+  "SK":["Bratislava","Košice","Prešov","Žilina","Nitra","Banská Bystrica","Trnava"],
+  "SM":["San Marino","Serravalle","Borgo Maggiore","Domagnano","Fiorentino","Acquaviva","Faetano"],
+  "TR":["Istanbul","Ankara","Izmir","Bursa","Adana","Gaziantep","Antalya"],
+  "UA":["Kyiv","Kharkiv","Odesa","Dnipro","Donetsk","Zaporizhzhia","Lviv"],
+  "VA":["Vatican City"]
+};
+
+// UI refs
+const countrySelect = document.getElementById('countrySelect');
+const citySelect = document.getElementById('citySelect');
+const getBtn = document.getElementById('getBtn');
+const locBtn = document.getElementById('locBtn');
+const info = document.getElementById('info');
+const mapButton = document.getElementById('mapButton');
+
+// helper: fill countries select with full names if available, otherwise code
+function populateCountries(){
+  // sort codes alphabetically so stable order
+  const codes = Object.keys(countries).sort();
+  for(const code of codes){
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = countryNames[code] || code;
+    opt.dataset.code = code;
+    countrySelect.appendChild(opt);
+  }
+}
+
+// fill cities for chosen country code
+function populateCities(code){
+  citySelect.innerHTML = '';
+  const list = countries[code] || [];
+  for(const c of list){
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    citySelect.appendChild(opt);
+  }
+}
+
+// initial populate
+populateCountries();
+countrySelect.value = Object.keys(countries)[0];
+populateCities(countrySelect.value);
+
+// when country changes, update cities
+countrySelect.addEventListener('change', ()=> populateCities(countrySelect.value));
+
+getBtn.addEventListener('click', async ()=>{
+  const city = citySelect.value;
+  const countryFull = countryNames[countrySelect.value] || countrySelect.value;
+  if(!city){ alert('Please select a city'); return; }
+  await fetchWeather(`${city}, ${countryFull}`);
+});
+
+locBtn.addEventListener('click', ()=>{
+  if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(async (pos)=>{
+    await fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
+  }, ()=> alert('Unable to retrieve location'));
+});
+
+// fetch & display helpers
+async function fetchWeather(query){
+  if(!apiKey || apiKey === 'YOUR_WEATHERAPI_KEY_HERE'){
+    info.innerHTML = '<div class="small">Please set your WeatherAPI key in the source (apiKey).</div>';
+    return;
+  }
+  const url = `https://api.weatherapi.com/v1/current.json?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&aqi=no`;
+  await doFetch(url);
+}
+
+async function fetchWeatherByCoords(lat, lon){
+  if(!apiKey || apiKey === 'YOUR_WEATHERAPI_KEY_HERE'){
+    info.innerHTML = '<div class="small">Please set your WeatherAPI key in the source (apiKey).</div>';
+    return;
+  }
+  const url = `https://api.weatherapi.com/v1/current.json?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(lat + ',' + lon)}&aqi=no`;
+  await doFetch(url);
+}
+
+async function doFetch(url){
+  try{
+    info.innerHTML = '<div class="small">Loading…</div>';
+    const res = await fetch(url);
+    if(!res.ok){
+      info.innerHTML = `<div class="small">Error fetching weather — HTTP ${res.status}</div>`;
+      stopAllSounds();
+      mapButton.style.display = 'none';
+      return;
+    }
+    const data = await res.json();
+    if(!data || data.error){
+      info.innerHTML = `<div class="small">Weather data not found: ${data?.error?.message || 'Unknown'}</div>`;
+      stopAllSounds();
+      mapButton.style.display = 'none';
+      return;
+    }
+    renderData(data);
+  }catch(e){
+    console.error(e);
+    info.innerHTML = '<div class="small">Network or other error occurred.</div>';
+    stopAllSounds();
+    mapButton.style.display = 'none';
+  }
+}
+
+function renderData(d){
+  // set pastel day/night background
+  const isDay = !!d.current.is_day; // 1 or 0 usually
+  if(isDay){
+    document.body.style.background = `linear-gradient(to bottom, var(--pastel-blue), var(--pastel-yellow))`;
+  } else {
+    document.body.style.background = `linear-gradient(to bottom, var(--pastel-dark1), var(--pastel-dark2))`;
+  }
+
+  // show main info
+  info.innerHTML = `
+    <h2>${escapeHtml(d.location.name)}, ${escapeHtml(d.location.country)}</h2>
+    <p class="small">Local time: ${escapeHtml(d.location.localtime || '')}</p>
+    <p>${escapeHtml(d.current.condition.text)}</p>
+    <p>🌡️ ${escapeHtml(d.current.temp_c)}°C  •  Feels: ${escapeHtml(d.current.feelslike_c)}°C</p>
+    <p>💨 Wind: ${escapeHtml(d.current.wind_kph)} kph  •  Humidity: ${escapeHtml(d.current.humidity)}%</p>
+  `;
+
+  // map button — uses lat/lon if present
+  const lat = d.location.lat, lon = d.location.lon;
+  if(lat != null && lon != null){
+    mapButton.style.display = 'inline-block';
+    mapButton.onclick = ()=> window.open(`https://www.google.com/maps?q=${lat},${lon}`,'_blank');
+  } else {
+    mapButton.style.display = 'none';
+  }
+
+  // play appropriate sound
+  playForCondition(d.current.condition.text.toLowerCase());
+}
+
+// SOUND CONTROL
+const sndSunny = document.getElementById('sndSunny');
+const sndRain = document.getElementById('sndRain');
+const sndWind = document.getElementById('sndWind');
+const sndSnow = document.getElementById('sndSnow');
+const sndThunder = document.getElementById('sndThunder');
+
+function stopAllSounds(){
+  [sndSunny,sndRain,sndWind,sndSnow,sndThunder].forEach(a=>{
+    try{ a.pause(); a.currentTime = 0; }catch(e){}
+  });
+}
+
+function playForCondition(cond){
+  stopAllSounds();
+  // prioritized matching
+  if(cond.includes('thunder') || cond.includes('storm') || cond.includes('thunderstorm')){
+    try{ sndThunder.play(); }catch(e){}
+  } else if(cond.includes('snow') || cond.includes('sleet') || cond.includes('blizzard')){
+    try{ sndSnow.play(); }catch(e){}
+  } else if(cond.includes('rain') || cond.includes('drizzle') || cond.includes('shower')){
+    try{ sndRain.play(); }catch(e){}
+  } else if(cond.includes('wind') || cond.includes('breezy') || cond.includes('gale')){
+    try{ sndWind.play(); }catch(e){}
+  } else {
+    // default sunny/clear/etc
+    try{ sndSunny.play(); }catch(e){}
+  }
+}
+
+// simple text-escape
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>
